@@ -1,10 +1,11 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Body
 from fastapi.responses import JSONResponse
 import tensorflow as tf
 import numpy as np
 from PIL import Image
 import io
 import cv2
+import requests
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -59,7 +60,7 @@ def preprocess_and_detect_face(image_bytes):
         "confidence_scores": {class_names[i]: float(predictions[0][i]) for i in range(len(class_names))}
     }
 
-# Predict endpoint
+# Predict endpoint for file upload
 @app.post("/predict/")
 async def predict(file: UploadFile = File(...)):
     try:
@@ -72,6 +73,28 @@ async def predict(file: UploadFile = File(...)):
         # Return prediction
         return JSONResponse({"prediction": face_prediction})
 
+    except ValueError as ve:
+        return JSONResponse({"message": str(ve)}, status_code=400)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Predict endpoint for image URL
+@app.post("/predict/url/")
+async def predict_url(image_url: str = Body(..., embed=True)):
+    try:
+        # Download image from URL
+        response = requests.get(image_url)
+        response.raise_for_status()
+        image_bytes = response.content
+
+        # Process image and detect face
+        face_prediction = preprocess_and_detect_face(image_bytes)
+
+        # Return prediction
+        return JSONResponse({"prediction": face_prediction})
+
+    except requests.exceptions.RequestException as re:
+        return JSONResponse({"message": str(re)}, status_code=400)
     except ValueError as ve:
         return JSONResponse({"message": str(ve)}, status_code=400)
     except Exception as e:
